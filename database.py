@@ -59,6 +59,12 @@ async def init_db():
             )
         ''')
 
+        # available_days 컬럼 마이그레이션
+        try:
+            await db.execute('SELECT available_days FROM party_applicants LIMIT 1')
+        except Exception:
+            await db.execute("ALTER TABLE party_applicants ADD COLUMN available_days TEXT DEFAULT ''")
+
         # 기존 DB 마이그레이션: char_name 컬럼 없으면 테이블 재생성
         try:
             await db.execute('SELECT char_name FROM party_applicants LIMIT 1')
@@ -211,14 +217,15 @@ async def add_applicant(
     is_sub: int = 0,
     memo: str = '',
     available_time: str = '',
+    available_days: str = '',
 ) -> bool:
     async with aiosqlite.connect(DB_PATH) as db:
         try:
             await db.execute(
                 '''INSERT INTO party_applicants
-                   (party_id, discord_id, char_name, job, combat_power, atool_score, is_sub, memo, available_time)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                (party_id, discord_id, char_name, job, combat_power, atool_score, is_sub, memo, available_time)
+                   (party_id, discord_id, char_name, job, combat_power, atool_score, is_sub, memo, available_time, available_days)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (party_id, discord_id, char_name, job, combat_power, atool_score, is_sub, memo, available_time, available_days)
             )
             await db.commit()
             return True
@@ -230,7 +237,7 @@ async def get_party_applicants(party_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute('''
-            SELECT char_name, job, combat_power, atool_score, discord_id, memo, available_time, is_sub
+            SELECT char_name, job, combat_power, atool_score, discord_id, memo, available_time, available_days, is_sub
             FROM party_applicants
             WHERE party_id = ?
             ORDER BY is_sub, job, atool_score DESC

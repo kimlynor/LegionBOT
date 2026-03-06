@@ -42,8 +42,26 @@ MEDIUM_TOP = Border(
     top=Side(style='medium'), bottom=Side(style='thin'),
 )
 
-HEADERS = ['캐릭명', '전투력', '아툴점수', '가능시간', '메모']
-COL_WIDTHS = [22, 16, 16, 35, 30]
+HEADERS = ['구분', '캐릭명', '전투력', '아툴점수', '가능시간', '메모']
+COL_WIDTHS = [8, 22, 16, 16, 25, 30]
+
+DAY_MAP = {
+    '월요일':           ['월'],
+    '화요일':           ['화'],
+    '수요일':           ['수'],
+    '목요일':           ['목'],
+    '금요일':           ['금'],
+    '토요일':           ['토'],
+    '일요일':           ['일'],
+    '평일 전체 (월~금)': ['월', '화', '수', '목', '금'],
+    '주말 (토~일)':      ['토', '일'],
+    '수~일 무관':        ['수', '목', '금', '토', '일'],
+    '월~화 무관':        ['월', '화'],
+    '전체 무관':         ['월', '화', '수', '목', '금', '토', '일'],
+}
+DAY_ORDER = ['월', '화', '수', '목', '금', '토', '일']
+DAY_FULL  = {'월': '월요일', '화': '화요일', '수': '수요일', '목': '목요일',
+             '금': '금요일', '토': '토요일', '일': '일요일'}
 
 
 def _set_cell(ws, row, col, value, font=None, fill=None, border=THIN, alignment=CENTER, height=None):
@@ -58,7 +76,7 @@ def _set_cell(ws, row, col, value, font=None, fill=None, border=THIN, alignment=
 
 def _write_sheet(ws, applicants: list, party_purpose: str):
     num_cols = len(HEADERS)
-    last_col_letter = chr(64 + num_cols)  # 'E'
+    last_col_letter = chr(64 + num_cols)  # 'F'
 
     # 제목 행
     ws.merge_cells(f'A1:{last_col_letter}1')
@@ -112,6 +130,7 @@ def _write_sheet(ws, applicants: list, party_purpose: str):
                                 end_color=job_color_map[job], fill_type='solid')
         for ap in members:
             values = [
+                '부캐' if ap['is_sub'] else '메인',
                 ap['char_name'],
                 ap['combat_power'],
                 ap['atool_score'],
@@ -140,15 +159,19 @@ def _write_sheet(ws, applicants: list, party_purpose: str):
 def create_party_excel(applicants: list, party_purpose: str) -> io.BytesIO:
     wb = openpyxl.Workbook()
 
-    main_chars = [ap for ap in applicants if not ap['is_sub']]
-    sub_chars  = [ap for ap in applicants if ap['is_sub']]
+    # 전체 시트
+    ws_all = wb.active
+    ws_all.title = '전체'
+    _write_sheet(ws_all, applicants, party_purpose)
 
-    ws_main = wb.active
-    ws_main.title = '메인캐'
-    _write_sheet(ws_main, main_chars, party_purpose)
-
-    ws_sub = wb.create_sheet(title='부캐')
-    _write_sheet(ws_sub, sub_chars, party_purpose)
+    # 요일별 시트
+    for day_short in DAY_ORDER:
+        day_applicants = [
+            ap for ap in applicants
+            if day_short in DAY_MAP.get(ap.get('available_days', ''), [])
+        ]
+        ws = wb.create_sheet(title=DAY_FULL[day_short])
+        _write_sheet(ws, day_applicants, party_purpose)
 
     output = io.BytesIO()
     wb.save(output)

@@ -202,50 +202,94 @@ class DateTimeSelectView(discord.ui.View):
         self.stop()
 
 
-# ── 캐릭터 선택 뷰 (부캐 있는 경우) ────────────────────────────────────────────
-class CharSelectView(discord.ui.View):
+DAY_OPTIONS = [
+    discord.SelectOption(label='월요일',           value='월요일'),
+    discord.SelectOption(label='화요일',           value='화요일'),
+    discord.SelectOption(label='수요일',           value='수요일'),
+    discord.SelectOption(label='목요일',           value='목요일'),
+    discord.SelectOption(label='금요일',           value='금요일'),
+    discord.SelectOption(label='토요일',           value='토요일'),
+    discord.SelectOption(label='일요일',           value='일요일'),
+    discord.SelectOption(label='평일 전체 (월~금)', value='평일 전체 (월~금)'),
+    discord.SelectOption(label='주말 (토~일)',      value='주말 (토~일)'),
+    discord.SelectOption(label='수~일 무관',        value='수~일 무관'),
+    discord.SelectOption(label='월~화 무관',        value='월~화 무관'),
+    discord.SelectOption(label='전체 무관',         value='전체 무관'),
+]
+
+
+# ── 캐릭터 + 요일 선택 뷰 ─────────────────────────────────────────────────────
+class ApplySetupView(discord.ui.View):
     def __init__(self, party_id: int, main_char, sub_chars: list):
         super().__init__(timeout=60)
         self.party_id = party_id
         self._main = main_char
         self._subs = {sc['char_name']: sc for sc in sub_chars}
+        self.selected_char = main_char
+        self.is_sub = False
+        self.selected_days = None
 
-        options = [
-            discord.SelectOption(
-                label=f'[메인] {main_char["char_name"]} ({main_char["job"]})',
-                value='main',
-                description=f'아툴점수: {main_char["atool_score"]:,}',
-            )
-        ]
-        for sc in sub_chars:
-            options.append(discord.SelectOption(
-                label=f'[부캐] {sc["char_name"]} ({sc["job"]})',
-                value=f'sub_{sc["char_name"]}',
-                description=f'아툴점수: {sc["atool_score"]:,}',
-            ))
+        row = 0
 
-        sel = discord.ui.Select(placeholder='지원할 캐릭터를 선택하세요', options=options)
-        sel.callback = self._select_cb
-        self.add_item(sel)
+        # 캐릭터 선택 (부캐 있는 경우만)
+        if sub_chars:
+            char_options = [
+                discord.SelectOption(
+                    label=f'[메인] {main_char["char_name"]} ({main_char["job"]})',
+                    value='main',
+                    description=f'아툴점수: {main_char["atool_score"]:,}',
+                    default=True,
+                )
+            ]
+            for sc in sub_chars:
+                char_options.append(discord.SelectOption(
+                    label=f'[부캐] {sc["char_name"]} ({sc["job"]})',
+                    value=f'sub_{sc["char_name"]}',
+                    description=f'아툴점수: {sc["atool_score"]:,}',
+                ))
+            char_sel = discord.ui.Select(placeholder='지원할 캐릭터를 선택하세요', options=char_options, row=row)
+            char_sel.callback = self._char_cb
+            self.add_item(char_sel)
+            row += 1
 
-    async def _select_cb(self, interaction: discord.Interaction):
+        # 요일 선택
+        day_sel = discord.ui.Select(placeholder='가능 요일을 선택하세요', options=DAY_OPTIONS, row=row)
+        day_sel.callback = self._day_cb
+        self.add_item(day_sel)
+        row += 1
+
+        # 다음 버튼
+        next_btn = discord.ui.Button(label='다음', style=discord.ButtonStyle.success, emoji='➡️', row=row)
+        next_btn.callback = self._next_cb
+        self.add_item(next_btn)
+
+    async def _char_cb(self, interaction: discord.Interaction):
         value = interaction.data['values'][0]
         if value == 'main':
-            char = self._main
-            is_sub = False
+            self.selected_char = self._main
+            self.is_sub = False
         else:
-            char_name = value[4:]  # 'sub_' 제거
-            char = self._subs[char_name]
-            is_sub = True
+            self.selected_char = self._subs[value[4:]]
+            self.is_sub = True
+        await interaction.response.defer()
 
+    async def _day_cb(self, interaction: discord.Interaction):
+        self.selected_days = interaction.data['values'][0]
+        await interaction.response.defer()
+
+    async def _next_cb(self, interaction: discord.Interaction):
+        if self.selected_days is None:
+            await interaction.response.send_message('❌ 가능 요일을 선택해주세요!', ephemeral=True)
+            return
         await interaction.response.send_modal(
             ApplyMemoModal(
                 party_id=self.party_id,
-                char_name=char['char_name'],
-                job=char['job'],
-                combat_power=char['combat_power'],
-                atool_score=char['atool_score'],
-                is_sub=is_sub,
+                char_name=self.selected_char['char_name'],
+                job=self.selected_char['job'],
+                combat_power=self.selected_char['combat_power'],
+                atool_score=self.selected_char['atool_score'],
+                is_sub=self.is_sub,
+                available_days=self.selected_days,
             )
         )
         self.stop()
@@ -294,10 +338,10 @@ class CancelSelectView(discord.ui.View):
 class ApplyMemoModal(discord.ui.Modal, title='파티 지원'):
     available_time = discord.ui.TextInput(
         label='가능 시간',
-        placeholder='예: 수요일 9시이후, 목요일 모든시간, 금요일 7시이후',
-        style=discord.TextStyle.paragraph,
+        placeholder='예: 9시 이후, 오후 6시~, 저녁만 가능',
+        style=discord.TextStyle.short,
         required=True,
-        max_length=200,
+        max_length=100,
     )
     memo = discord.ui.TextInput(
         label='메모 (선택)',
@@ -307,7 +351,7 @@ class ApplyMemoModal(discord.ui.Modal, title='파티 지원'):
         max_length=100,
     )
 
-    def __init__(self, party_id: int, char_name: str, job: str, combat_power: int, atool_score: int, is_sub: bool = False):
+    def __init__(self, party_id: int, char_name: str, job: str, combat_power: int, atool_score: int, is_sub: bool = False, available_days: str = ''):
         super().__init__()
         self.party_id = party_id
         self.char_name = char_name
@@ -315,6 +359,7 @@ class ApplyMemoModal(discord.ui.Modal, title='파티 지원'):
         self.combat_power = combat_power
         self.atool_score = atool_score
         self.is_sub = is_sub
+        self.available_days = available_days
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -337,6 +382,7 @@ class ApplyMemoModal(discord.ui.Modal, title='파티 지원'):
             is_sub=1 if self.is_sub else 0,
             memo=memo_text,
             available_time=available_time_text,
+            available_days=self.available_days,
         )
         if not success:
             await interaction.followup.send('이미 이 캐릭터로 지원하셨습니다! ✅', ephemeral=True)
@@ -348,6 +394,7 @@ class ApplyMemoModal(discord.ui.Modal, title='파티 지원'):
         msg_text = (
             f'✅ 파티 지원 완료!\n'
             f'캐릭터: **{self.char_name}** ({self.job}) [{char_type}]\n'
+            f'가능 요일: `{self.available_days}`\n'
             f'가능 시간: `{available_time_text}`\n'
         )
         if memo_text:
@@ -403,28 +450,13 @@ class PartyApplyView(discord.ui.View):
             return
 
         sub_chars = list(await db.get_sub_characters(str(interaction.user.id)))
-
-        if not sub_chars:
-            # 부캐 없음 → 바로 모달
-            await interaction.response.send_modal(
-                ApplyMemoModal(
-                    party_id=self.party_id,
-                    char_name=user['char_name'],
-                    job=user['job'],
-                    combat_power=user['combat_power'],
-                    atool_score=user['atool_score'],
-                    is_sub=False,
-                )
-            )
-        else:
-            # 부캐 있음 → 캐릭터 선택 드롭다운
-            view = CharSelectView(self.party_id, user, sub_chars)
-            embed = discord.Embed(
-                title='캐릭터 선택',
-                description='지원할 캐릭터를 선택하세요.',
-                color=discord.Color.blue(),
-            )
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        view = ApplySetupView(self.party_id, user, sub_chars)
+        embed = discord.Embed(
+            title='파티 지원',
+            description='가능 요일을 선택하고 [다음]을 눌러주세요.',
+            color=discord.Color.blue(),
+        )
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _cancel_callback(self, interaction: discord.Interaction):
         party = await db.get_party(self.party_id)
@@ -580,6 +612,7 @@ class Party(commands.Cog):
                         'atool_score': fresh['atool_score'],
                         'memo': ap['memo'],
                         'available_time': ap['available_time'],
+                        'available_days': ap['available_days'],
                         'is_sub': ap['is_sub'],
                     })
                 else:
@@ -590,6 +623,7 @@ class Party(commands.Cog):
                         'atool_score': ap['atool_score'],
                         'memo': ap['memo'],
                         'available_time': ap['available_time'],
+                        'available_days': ap['available_days'],
                         'is_sub': ap['is_sub'],
                     })
 
