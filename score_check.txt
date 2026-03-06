@@ -1,0 +1,106 @@
+#dps-score-value[0]: 285,644
+#combat-score-max-info[0]: 달성 최고 점수: 285,644
+.combat-stat-value[0]: 7,864
+.combat-stat-value[1]: 81.0%80.0%
+.combat-stat-value[2]: +75.7%
+.combat-stat-value[3]: +45.1%
+.combat-stat-value[4]: +88.6%
+.combat-stat-value[5]: +32.0%
+.combat-stat-value[6]: +170.8%
+.combat-stat-value[7]: +33.8%
+.combat-stat-value[8]: +35.0%
+.combat-stat-value[9]: +12.0%
+.combat-stat-value[10]: +30.8%
+.combat-stat-value[11]: 1421 ~ 1760
+
+=== score/dps/combat 포함 id 요소 ===
+  #result-combat-power: 3,837
+  #dps-stats-info: 아툴 전투 점수 (PVE 딜 세팅 점수)
+                
+              
+              
+              달성 최고 점수: 285,64
+  #combat-score-max-info: 달성 최고 점수: 285,644
+  #dps-score-value: 285,644
+  #combat-score-power-range-info: 💡 점수가 왜 떨어졌나요?📋 2월 24일 전투 점수 관련 수정 사항
+  #combat-score-rankings-info: 전체 랭킹
+                    471위 / 1034314명(상위 0.05%)
+                  
+                  
+          
+  #combat-score-overall-percentile: 471위 / 1034314명(상위 0.05%)
+  #combat-score-job-rank: 104위 / 112374명(상위 0.09%)
+  #combat-score-server-rank: 8위 / 24614명(상위 0.03%)
+  #combat-score-ranking-notice: 달성 최고 점수 기준 랭킹입니다
+  #combat-speed-container: 전투 점수+75.7%
+                
+                  전투 속도
+                  
+                    i
+      
+  #combat-speed-damage-badge: 전투 점수+75.7%
+  #tooltip-soul-combat-speed: +35.3%
+  #tooltip-accessory-combat-speed: +2.0%
+  #tooltip-time-combat-speed: +28.4%
+  #tooltip-daevanion-combat-speed: +5.0%
+  #tooltip-title-combat-speed: +5.0%
+  #combat-speed-value: +75.7%
+  #combat-speed-percentile: (상위 0.56%)
+  #combat-score-help-modal: 점수가 왜 떨어졌나요?
+                ×
+              
+              
+                
+                  1. 타
+  #combat-score-patch-modal: 2월 24일 전투 점수 관련 수정 사항
+                ×
+              
+              
+                
+             
+  #sim-score-container: 현재 전투 점수
+                      -
+                    
+                    →
+                    
+   
+  #sim-original-combat-score: -
+  #sim-new-combat-score: -
+  #sim-score-diff: 
+  #combat-power-ranking-content: 직업 필터
+                
+                  전체
+                  검성
+                  수호성
+             
+  #combat-score-ranking-content: 직업 필터
+                  
+                    전체
+                    검성
+                    수호성
+     
+  #combat-score-ranking-job-filters: 전체
+                    검성
+                    수호성
+                    궁성
+                    살성
+    
+  #combat-score-ranking-server-filters: 전체
+  #combat-score-max-filters: 전체
+                    4만 이하
+                    8만 이하
+                    12만 이하
+                  
+  #combat-score-ranking-container: 순위
+                        닉네임
+                        직업
+                        종족
+               
+  #combat-score-ranking-last-update: 
+  #combat-score-ranking-table: 순위
+                        닉네임
+                        직업
+                        종족
+               
+  #combat-score-ranking-body: 아툴 전투 점수 랭킹 데이터를 불러오는 중...
+  #combat-score-ranking-pagination: 
