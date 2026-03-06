@@ -1,3 +1,5 @@
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 git add .
 $msg = Read-Host "커밋 메시지 입력"
 git commit -m $msg
