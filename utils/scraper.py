@@ -31,7 +31,7 @@ async def scrape_character(char_name: str) -> Optional[dict]:
     aion2.plaync.com 공식 API로 캐릭터 정보를 조회합니다.
     반환: {'char_name': str, 'job': str, 'combat_power': int, 'atool_score': int}
       - combat_power : 아이템레벨 (예: 3976)
-      - atool_score  : 공식 전투력 combatPower (예: 508060)
+      - atool_score  : 전투력 combatPower (예: 508060)
     """
     async with _semaphore:
         try:
@@ -85,7 +85,7 @@ async def scrape_character(char_name: str) -> Optional[dict]:
 
             profile = info.get('profile', {})
             class_name    = profile.get('className', '알 수 없음')
-            combat_power  = profile.get('combatPower', 0)   # 공식 전투력 (atool_score 자리)
+            combat_power  = profile.get('combatPower', 0)   # 전투력
             char_name_res = profile.get('characterName', found_name)
 
             # 아이템레벨 (combat_power 자리)

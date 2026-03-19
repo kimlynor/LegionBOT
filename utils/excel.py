@@ -125,7 +125,7 @@ def _write_sheet(ws, applicants: list, party_purpose: str):
                       fill=HEADER_FILL, height=20)
         row += 1
 
-        # 데이터 행 (아툴점수 내림차순)
+        # 데이터 행 (전투력 내림차순)
         data_fill = PatternFill(start_color=job_color_map[job],
                                 end_color=job_color_map[job], fill_type='solid')
         for ap in members:

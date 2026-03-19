@@ -220,7 +220,7 @@ class SubCharManageView(discord.ui.View):
                 discord.SelectOption(
                     label=f'{sc["char_name"]} ({sc["job"]})',
                     value=sc['char_name'],
-                    description=f'아툴점수: {sc["atool_score"]:,}',
+                    description=f'전투력: {sc["atool_score"]:,}',
                 )
                 for sc in subs
             ]
@@ -502,7 +502,7 @@ class Registration(commands.Cog):
         subs = await db.get_sub_characters(str(interaction.user.id))
         if subs:
             sub_list = '\n'.join(
-                f'• {sc["char_name"]} ({sc["job"]}) — 아툴 {sc["atool_score"]:,}'
+                f'• {sc["char_name"]} ({sc["job"]}) — 전투력 {sc["atool_score"]:,}'
                 for sc in subs
             )
             embed.add_field(name=f'부캐릭터 ({len(subs)}개)', value=sub_list, inline=False)

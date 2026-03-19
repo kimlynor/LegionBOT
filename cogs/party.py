@@ -237,7 +237,7 @@ class ApplySetupView(discord.ui.View):
                 discord.SelectOption(
                     label=f'[메인] {main_char["char_name"]} ({main_char["job"]})',
                     value='main',
-                    description=f'아툴점수: {main_char["atool_score"]:,}',
+                    description=f'전투력: {main_char["atool_score"]:,}',
                     default=True,
                 )
             ]
@@ -245,7 +245,7 @@ class ApplySetupView(discord.ui.View):
                 char_options.append(discord.SelectOption(
                     label=f'[부캐] {sc["char_name"]} ({sc["job"]})',
                     value=f'sub_{sc["char_name"]}',
-                    description=f'아툴점수: {sc["atool_score"]:,}',
+                    description=f'전투력: {sc["atool_score"]:,}',
                 ))
             char_sel = discord.ui.Select(placeholder='지원할 캐릭터를 선택하세요', options=char_options, row=row)
             char_sel.callback = self._char_cb
