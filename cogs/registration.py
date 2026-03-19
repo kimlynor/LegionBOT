@@ -93,7 +93,7 @@ class CharNameModal(discord.ui.Modal, title='캐릭터 등록 / 수정'):
             atool_score=data['atool_score'],
         )
 
-        nickname = _build_nickname(data['char_name'], data['job'], data['combat_power'])
+        nickname = _build_nickname(data['char_name'], data['job'], data['atool_score'])
 
         nick_changed = False
         try:
@@ -106,8 +106,8 @@ class CharNameModal(discord.ui.Modal, title='캐릭터 등록 / 수정'):
         embed = discord.Embed(title=title, color=discord.Color.green())
         embed.add_field(name='캐릭터명', value=data['char_name'], inline=True)
         embed.add_field(name='직업', value=data['job'], inline=True)
-        embed.add_field(name='전투력', value=f"{data['combat_power']:,}", inline=True)
-        embed.add_field(name='아툴점수', value=f"{data['atool_score']:,}", inline=True)
+        embed.add_field(name='아이템레벨', value=f"{data['combat_power']:,}", inline=True)
+        embed.add_field(name='전투력', value=f"{data['atool_score']:,}", inline=True)
         if nick_changed:
             embed.add_field(name='닉네임', value=f'`{nickname}`', inline=False)
         else:
@@ -197,8 +197,8 @@ class SubCharModal(discord.ui.Modal, title='부캐 등록'):
         embed = discord.Embed(title=f'✅ 부캐 {action} 완료', color=discord.Color.purple())
         embed.add_field(name='캐릭터명', value=data['char_name'], inline=True)
         embed.add_field(name='직업', value=data['job'], inline=True)
-        embed.add_field(name='전투력', value=f"{data['combat_power']:,}", inline=True)
-        embed.add_field(name='아툴점수', value=f"{data['atool_score']:,}", inline=True)
+        embed.add_field(name='아이템레벨', value=f"{data['combat_power']:,}", inline=True)
+        embed.add_field(name='전투력', value=f"{data['atool_score']:,}", inline=True)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
 
@@ -270,7 +270,7 @@ class SubCharView(discord.ui.View):
             for sc in subs:
                 embed.add_field(
                     name=f'{sc["char_name"]} ({sc["job"]})',
-                    value=f'전투력: {sc["combat_power"]:,} | 아툴점수: {sc["atool_score"]:,}',
+                    value=f'아이템레벨: {sc["combat_power"]:,} | 전투력: {sc["atool_score"]:,}',
                     inline=False,
                 )
             embed.set_footer(text=f'등록된 부캐: {len(subs)}/5')
@@ -282,8 +282,8 @@ class SubCharView(discord.ui.View):
 
 # ── 닉네임 빌더 ───────────────────────────────────────────────────────────────
 
-def _build_nickname(char_name: str, job: str, combat_power: int) -> str:
-    nick = f'{char_name}/{job}/{combat_power:,}'
+def _build_nickname(char_name: str, job: str, atool_score: int) -> str:
+    nick = f'{char_name}/{job}/{atool_score:,}'
     if len(nick) > 32:
         nick = f'{char_name}/{job}'
     if len(nick) > 32:
@@ -334,7 +334,7 @@ class Registration(commands.Cog):
                     member = guild.get_member(int(row['discord_id']))
                     if member:
                         try:
-                            await member.edit(nick=_build_nickname(fresh['char_name'], fresh['job'], fresh['combat_power']))
+                            await member.edit(nick=_build_nickname(fresh['char_name'], fresh['job'], fresh['atool_score']))
                             updated += 1
                         except discord.Forbidden:
                             pass
@@ -397,7 +397,7 @@ class Registration(commands.Cog):
                         member = guild.get_member(int(row['discord_id']))
                         if member:
                             try:
-                                await member.edit(nick=_build_nickname(fresh['char_name'], fresh['job'], fresh['combat_power']))
+                                await member.edit(nick=_build_nickname(fresh['char_name'], fresh['job'], fresh['atool_score']))
                                 nick_updated += 1
                             except discord.Forbidden:
                                 pass
@@ -496,8 +496,8 @@ class Registration(commands.Cog):
         embed = discord.Embed(title='📋 내 등록 정보', color=discord.Color.blue())
         embed.add_field(name='캐릭터명', value=user['char_name'], inline=True)
         embed.add_field(name='직업', value=user['job'], inline=True)
-        embed.add_field(name='전투력', value=f"{user['combat_power']:,}", inline=True)
-        embed.add_field(name='아툴점수', value=f"{user['atool_score']:,}", inline=True)
+        embed.add_field(name='아이템레벨', value=f"{user['combat_power']:,}", inline=True)
+        embed.add_field(name='전투력', value=f"{user['atool_score']:,}", inline=True)
 
         subs = await db.get_sub_characters(str(interaction.user.id))
         if subs:
