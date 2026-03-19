@@ -499,7 +499,11 @@ class PartyApplyView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
 
         cog: 'Party' = interaction.client.get_cog('Party')
-        if cog and self.party_id in cog._tasks:
+        if not cog:
+            await interaction.followup.send('❌ 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', ephemeral=True)
+            return
+
+        if self.party_id in cog._tasks:
             cog._tasks[self.party_id].cancel()
 
         await interaction.followup.send('🔒 즉시 마감 처리 중...', ephemeral=True)
@@ -586,25 +590,32 @@ class Party(commands.Cog):
 
             refreshed = []
             for ap in applicants:
-                fresh = await scrape_character(ap['char_name'])
+                try:
+                    fresh = await scrape_character(ap['char_name'])
+                except Exception:
+                    fresh = None
+
                 if fresh:
-                    if ap['is_sub']:
-                        await db.upsert_sub_character(
-                            discord_id=ap['discord_id'],
-                            char_name=fresh['char_name'],
-                            job=fresh['job'],
-                            combat_power=fresh['combat_power'],
-                            atool_score=fresh['atool_score'],
-                        )
-                    else:
-                        await db.upsert_user(
-                            discord_id=ap['discord_id'],
-                            discord_name='',
-                            char_name=fresh['char_name'],
-                            job=fresh['job'],
-                            combat_power=fresh['combat_power'],
-                            atool_score=fresh['atool_score'],
-                        )
+                    try:
+                        if ap['is_sub']:
+                            await db.upsert_sub_character(
+                                discord_id=ap['discord_id'],
+                                char_name=fresh['char_name'],
+                                job=fresh['job'],
+                                combat_power=fresh['combat_power'],
+                                atool_score=fresh['atool_score'],
+                            )
+                        else:
+                            await db.upsert_user(
+                                discord_id=ap['discord_id'],
+                                discord_name='',
+                                char_name=fresh['char_name'],
+                                job=fresh['job'],
+                                combat_power=fresh['combat_power'],
+                                atool_score=fresh['atool_score'],
+                            )
+                    except Exception:
+                        pass  # DB 갱신 실패해도 엑셀 출력은 계속 진행
                     refreshed.append({
                         'char_name': fresh['char_name'],
                         'job': fresh['job'],

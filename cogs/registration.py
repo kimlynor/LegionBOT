@@ -15,10 +15,10 @@ _register_cooldown: dict[str, float] = {}
 _subchar_cooldown: dict[str, float] = {}
 COOLDOWN_SECONDS = 60
 
-# /갱신 중복 실행 방지
+# /갱신 및 자동갱신 중복 실행 방지
 _refresh_running = False
 
-_CHAR_NAME_RE = re.compile(r'^[가-힣a-zA-Z0-9\s]{1,30}$')
+_CHAR_NAME_RE = re.compile(r'^[가-힣a-zA-Z0-9]{1,30}$')
 
 
 def _validate_char_name(name: str) -> bool:
@@ -30,6 +30,15 @@ def _check_cooldown(store: dict, discord_id: str) -> int:
     last = store.get(discord_id, 0)
     remaining = int(COOLDOWN_SECONDS - (time.time() - last))
     return max(remaining, 0)
+
+
+def _cleanup_cooldowns():
+    """오래된 쿨다운 항목 제거 (메모리 누수 방지)."""
+    cutoff = time.time() - COOLDOWN_SECONDS * 2
+    for store in (_register_cooldown, _subchar_cooldown):
+        stale = [k for k, v in store.items() if v < cutoff]
+        for k in stale:
+            del store[k]
 
 
 # ── 메인 캐릭터 등록 ──────────────────────────────────────────────────────────
@@ -118,6 +127,7 @@ class RegisterView(discord.ui.View):
         emoji='📝',
     )
     async def register(self, interaction: discord.Interaction, button: discord.ui.Button):
+        _cleanup_cooldowns()
         remaining = _check_cooldown(_register_cooldown, str(interaction.user.id))
         if remaining > 0:
             await interaction.response.send_message(
@@ -223,6 +233,7 @@ class SubCharManageView(discord.ui.View):
             self.add_item(del_sel)
 
     async def _add_callback(self, interaction: discord.Interaction):
+        _cleanup_cooldowns()
         remaining = _check_cooldown(_subchar_cooldown, str(interaction.user.id))
         if remaining > 0:
             await interaction.response.send_message(
@@ -292,34 +303,46 @@ class Registration(commands.Cog):
 
     @tasks.loop(time=dtime(hour=0, minute=0))
     async def daily_nickname_update(self):
+        global _refresh_running
+        if _refresh_running:
+            print('[자동갱신] 갱신 중복 — 건너뜀')
+            return
+
         guilds = [self.bot.get_guild(gid) for gid in GUILD_IDS]
         guilds = [g for g in guilds if g]
         if not guilds:
             return
+
+        _refresh_running = True
         print('[자동갱신] 전체 유저 닉네임 업데이트 시작...')
-        users = await db.get_all_users()
-        updated = 0
-        for row in users:
-            fresh = await scrape_character(row['char_name'])
-            if not fresh:
-                continue
-            await db.upsert_user(
-                discord_id=row['discord_id'],
-                discord_name=row['discord_name'] or '',
-                char_name=fresh['char_name'],
-                job=fresh['job'],
-                combat_power=fresh['combat_power'],
-                atool_score=fresh['atool_score'],
-            )
-            for guild in guilds:
-                member = guild.get_member(int(row['discord_id']))
-                if member:
-                    try:
-                        await member.edit(nick=_build_nickname(fresh['char_name'], fresh['job'], fresh['combat_power']))
-                        updated += 1
-                    except discord.Forbidden:
-                        pass
-        print(f'[자동갱신] 완료 — {updated}명 닉네임 업데이트')
+        try:
+            users = await db.get_all_users()
+            updated = 0
+            for row in users:
+                fresh = await scrape_character(row['char_name'])
+                if not fresh:
+                    continue
+                await db.upsert_user(
+                    discord_id=row['discord_id'],
+                    discord_name=row['discord_name'] or '',
+                    char_name=fresh['char_name'],
+                    job=fresh['job'],
+                    combat_power=fresh['combat_power'],
+                    atool_score=fresh['atool_score'],
+                )
+                for guild in guilds:
+                    member = guild.get_member(int(row['discord_id']))
+                    if member:
+                        try:
+                            await member.edit(nick=_build_nickname(fresh['char_name'], fresh['job'], fresh['combat_power']))
+                            updated += 1
+                        except discord.Forbidden:
+                            pass
+            print(f'[자동갱신] 완료 — {updated}명 닉네임 업데이트')
+        except Exception as e:
+            print(f'[자동갱신 오류] {type(e).__name__}')
+        finally:
+            _refresh_running = False
 
     @daily_nickname_update.before_loop
     async def before_daily_update(self):

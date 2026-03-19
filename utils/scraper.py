@@ -14,11 +14,15 @@ INFO_URL   = 'https://aion2.plaync.com/api/character/info'
 _semaphore = asyncio.Semaphore(5)
 _session: Optional[aiohttp.ClientSession] = None
 
+# HTTP 요청 타임아웃 (초)
+_TIMEOUT = aiohttp.ClientTimeout(total=15)
+
 
 async def _get_session() -> aiohttp.ClientSession:
     global _session
     if _session is None or _session.closed:
-        _session = aiohttp.ClientSession()
+        connector = aiohttp.TCPConnector(limit=10, ttl_dns_cache=300)
+        _session = aiohttp.ClientSession(connector=connector, timeout=_TIMEOUT)
     return _session
 
 
@@ -54,13 +58,19 @@ async def scrape_character(char_name: str) -> Optional[dict]:
             for item in char_list:
                 clean = re.sub(r'<[^>]+>', '', item.get('name', ''))
                 if clean.strip().lower() == char_name.strip().lower():
-                    char_id = unquote(item['characterId'])
+                    raw_id = item.get('characterId', '')
+                    if not raw_id:
+                        continue
+                    char_id = unquote(raw_id)
                     found_name = clean.strip()
                     break
 
             if not char_id:
                 # 정확 매칭 없으면 첫 번째 결과
-                char_id = unquote(char_list[0]['characterId'])
+                raw_id = char_list[0].get('characterId', '')
+                if not raw_id:
+                    return None
+                char_id = unquote(raw_id)
                 found_name = re.sub(r'<[^>]+>', '', char_list[0].get('name', '')).strip()
 
             # 2단계: characterId로 상세 정보 조회
@@ -82,16 +92,19 @@ async def scrape_character(char_name: str) -> Optional[dict]:
             item_level = 0
             for stat in info.get('stat', {}).get('statList', []):
                 if stat.get('type') == 'ItemLevel':
-                    item_level = stat.get('value', 0)
+                    item_level = int(stat.get('value', 0))
                     break
 
             return {
                 'char_name':    char_name_res,
                 'job':          class_name,
                 'combat_power': item_level,    # 아이템레벨
-                'atool_score':  combat_power,  # 공식 전투력
+                'atool_score':  int(combat_power),  # 공식 전투력
             }
 
+        except asyncio.TimeoutError:
+            print(f'[스크래퍼] 타임아웃: {char_name}')
+            return None
         except Exception as e:
-            print(f'[스크래퍼 오류] {e}')
+            print(f'[스크래퍼 오류] {type(e).__name__}: {char_name}')
             return None

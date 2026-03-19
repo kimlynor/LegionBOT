@@ -1,4 +1,5 @@
 import os
+import sys
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -6,11 +7,20 @@ from database import init_db
 
 load_dotenv()
 
-GUILD_IDS = [int(gid.strip()) for gid in os.getenv('GUILD_ID', '').split(',') if gid.strip()]
+_token = os.getenv('DISCORD_TOKEN', '').strip()
+if not _token:
+    print('[오류] .env 파일에 DISCORD_TOKEN이 설정되지 않았습니다.')
+    sys.exit(1)
+
+_guild_env = os.getenv('GUILD_ID', '').strip()
+if not _guild_env:
+    print('[오류] .env 파일에 GUILD_ID가 설정되지 않았습니다.')
+    sys.exit(1)
+
+GUILD_IDS = [int(gid.strip()) for gid in _guild_env.split(',') if gid.strip()]
 
 intents = discord.Intents.default()
 intents.members = True
-intents.message_content = True
 
 
 class LegionBot(commands.Bot):
@@ -47,4 +57,4 @@ class LegionBot(commands.Bot):
 
 
 bot = LegionBot()
-bot.run(os.getenv('DISCORD_TOKEN'))
+bot.run(_token)
