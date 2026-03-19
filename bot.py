@@ -51,9 +51,10 @@ class LegionBot(commands.Bot):
     async def on_interaction(self, interaction: discord.Interaction):
         # 지정된 서버 외에서는 모든 인터랙션 차단
         if interaction.guild_id not in GUILD_IDS:
-            await interaction.response.send_message('이 봇은 지정된 서버에서만 사용할 수 있습니다.', ephemeral=True)
-            return
-        await super().on_interaction(interaction)
+            try:
+                await interaction.response.send_message('이 봇은 지정된 서버에서만 사용할 수 있습니다.', ephemeral=True)
+            except Exception:
+                pass
 
 
 bot = LegionBot()
