@@ -1,4 +1,6 @@
 import os
+import re
+import time
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -7,6 +9,27 @@ import database as db
 from utils.scraper import scrape_character
 
 GUILD_IDS = [int(gid.strip()) for gid in os.getenv('GUILD_ID', '').split(',') if gid.strip()]
+
+# 쿨다운: discord_id → 마지막 등록 시각 (초)
+_register_cooldown: dict[str, float] = {}
+_subchar_cooldown: dict[str, float] = {}
+COOLDOWN_SECONDS = 60
+
+# /갱신 중복 실행 방지
+_refresh_running = False
+
+_CHAR_NAME_RE = re.compile(r'^[가-힣a-zA-Z0-9\s]{1,30}$')
+
+
+def _validate_char_name(name: str) -> bool:
+    return bool(_CHAR_NAME_RE.match(name))
+
+
+def _check_cooldown(store: dict, discord_id: str) -> int:
+    """남은 쿨다운 초 반환. 0이면 사용 가능."""
+    last = store.get(discord_id, 0)
+    remaining = int(COOLDOWN_SECONDS - (time.time() - last))
+    return max(remaining, 0)
 
 
 # ── 메인 캐릭터 등록 ──────────────────────────────────────────────────────────
@@ -27,6 +50,13 @@ class CharNameModal(discord.ui.Modal, title='캐릭터 등록 / 수정'):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         name = self.char_name.value.strip()
+
+        if not _validate_char_name(name):
+            await interaction.followup.send(
+                '❌ 캐릭터명에 허용되지 않는 문자가 포함되어 있습니다.\n한글, 영문, 숫자만 입력해주세요.',
+                ephemeral=True,
+            )
+            return
 
         is_update = (await db.get_user(str(interaction.user.id))) is not None
 
@@ -88,6 +118,13 @@ class RegisterView(discord.ui.View):
         emoji='📝',
     )
     async def register(self, interaction: discord.Interaction, button: discord.ui.Button):
+        remaining = _check_cooldown(_register_cooldown, str(interaction.user.id))
+        if remaining > 0:
+            await interaction.response.send_message(
+                f'⏳ {remaining}초 후에 다시 시도해주세요.', ephemeral=True
+            )
+            return
+        _register_cooldown[str(interaction.user.id)] = time.time()
         existing = await db.get_user(str(interaction.user.id))
         current_char = existing['char_name'] if existing else None
         await interaction.response.send_modal(CharNameModal(current_char=current_char))
@@ -106,6 +143,13 @@ class SubCharModal(discord.ui.Modal, title='부캐 등록'):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         name = self.char_name.value.strip()
+
+        if not _validate_char_name(name):
+            await interaction.followup.send(
+                '❌ 캐릭터명에 허용되지 않는 문자가 포함되어 있습니다.\n한글, 영문, 숫자만 입력해주세요.',
+                ephemeral=True,
+            )
+            return
 
         await interaction.followup.send(
             f'🔍 **{name}** 캐릭터를 검색 중입니다... (10~20초 소요)',
@@ -179,6 +223,13 @@ class SubCharManageView(discord.ui.View):
             self.add_item(del_sel)
 
     async def _add_callback(self, interaction: discord.Interaction):
+        remaining = _check_cooldown(_subchar_cooldown, str(interaction.user.id))
+        if remaining > 0:
+            await interaction.response.send_message(
+                f'⏳ {remaining}초 후에 다시 시도해주세요.', ephemeral=True
+            )
+            return
+        _subchar_cooldown[str(interaction.user.id)] = time.time()
         await interaction.response.send_modal(SubCharModal())
 
     async def _delete_callback(self, interaction: discord.Interaction):
@@ -278,12 +329,19 @@ class Registration(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def refresh_all(self, interaction: discord.Interaction):
+        global _refresh_running
+        if _refresh_running:
+            await interaction.response.send_message('⏳ 이미 갱신이 진행 중입니다. 잠시 후 다시 시도해주세요.', ephemeral=True)
+            return
+
+        _refresh_running = True
         await interaction.response.defer(ephemeral=True)
 
         users = await db.get_all_users()
         total = len(users)
 
         if total == 0:
+            _refresh_running = False
             await interaction.followup.send('❌ 등록된 유저가 없습니다.', ephemeral=True)
             return
 
@@ -299,60 +357,69 @@ class Registration(commands.Cog):
         sub_ok = sub_fail = 0
         nick_updated = 0
 
-        # 메인캐 갱신
-        for row in users:
-            fresh = await scrape_character(row['char_name'])
-            if fresh:
-                await db.upsert_user(
-                    discord_id=row['discord_id'],
-                    discord_name=row['discord_name'] or '',
-                    char_name=fresh['char_name'],
-                    job=fresh['job'],
-                    combat_power=fresh['combat_power'],
-                    atool_score=fresh['atool_score'],
-                )
-                for guild in guilds:
-                    member = guild.get_member(int(row['discord_id']))
-                    if member:
-                        try:
-                            await member.edit(nick=_build_nickname(fresh['char_name'], fresh['job'], fresh['combat_power']))
-                            nick_updated += 1
-                        except discord.Forbidden:
-                            pass
-                main_ok += 1
-            else:
-                main_fail += 1
+        try:
+            # 메인캐 갱신
+            for row in users:
+                fresh = await scrape_character(row['char_name'])
+                if fresh:
+                    await db.upsert_user(
+                        discord_id=row['discord_id'],
+                        discord_name=row['discord_name'] or '',
+                        char_name=fresh['char_name'],
+                        job=fresh['job'],
+                        combat_power=fresh['combat_power'],
+                        atool_score=fresh['atool_score'],
+                    )
+                    for guild in guilds:
+                        member = guild.get_member(int(row['discord_id']))
+                        if member:
+                            try:
+                                await member.edit(nick=_build_nickname(fresh['char_name'], fresh['job'], fresh['combat_power']))
+                                nick_updated += 1
+                            except discord.Forbidden:
+                                pass
+                    main_ok += 1
+                else:
+                    main_fail += 1
 
-        # 부캐 갱신
-        all_subs = await db.get_all_sub_characters()
-        for sc in all_subs:
-            fresh = await scrape_character(sc['char_name'])
-            if fresh:
-                await db.upsert_sub_character(
-                    discord_id=sc['discord_id'],
-                    char_name=fresh['char_name'],
-                    job=fresh['job'],
-                    combat_power=fresh['combat_power'],
-                    atool_score=fresh['atool_score'],
-                )
-                sub_ok += 1
-            else:
-                sub_fail += 1
+            # 부캐 갱신
+            all_subs = await db.get_all_sub_characters()
+            for sc in all_subs:
+                fresh = await scrape_character(sc['char_name'])
+                if fresh:
+                    await db.upsert_sub_character(
+                        discord_id=sc['discord_id'],
+                        char_name=fresh['char_name'],
+                        job=fresh['job'],
+                        combat_power=fresh['combat_power'],
+                        atool_score=fresh['atool_score'],
+                    )
+                    sub_ok += 1
+                else:
+                    sub_fail += 1
 
-        lines = [
-            f'✅ **갱신 완료!**',
-            f'',
-            f'**메인캐** — 성공: {main_ok}명 / 실패: {main_fail}명',
-            f'**부캐** — 성공: {sub_ok}개 / 실패: {sub_fail}개',
-            f'**닉네임 변경** — {nick_updated}명',
-        ]
-        if main_fail or sub_fail:
-            lines.append(f'\n⚠️ 실패 항목은 캐릭터명이 변경됐거나 API 오류일 수 있습니다.')
+            lines = [
+                f'✅ **갱신 완료!**',
+                f'',
+                f'**메인캐** — 성공: {main_ok}명 / 실패: {main_fail}명',
+                f'**부캐** — 성공: {sub_ok}개 / 실패: {sub_fail}개',
+                f'**닉네임 변경** — {nick_updated}명',
+            ]
+            if main_fail or sub_fail:
+                lines.append(f'\n⚠️ 실패 항목은 캐릭터명이 변경됐거나 API 오류일 수 있습니다.')
 
-        await interaction.followup.send('\n'.join(lines), ephemeral=True)
+            await interaction.followup.send('\n'.join(lines), ephemeral=True)
+
+        except Exception:
+            await interaction.followup.send('❌ 갱신 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', ephemeral=True)
+
+        finally:
+            _refresh_running = False
 
     @refresh_all.error
     async def refresh_all_error(self, interaction: discord.Interaction, error):
+        global _refresh_running
+        _refresh_running = False
         await interaction.response.send_message('❌ 관리자만 사용할 수 있습니다.', ephemeral=True)
 
     @app_commands.command(name='등록설정', description='유저 등록 버튼을 이 채널에 생성합니다 (관리자 전용)')
