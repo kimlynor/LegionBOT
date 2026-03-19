@@ -274,6 +274,87 @@ class Registration(commands.Cog):
     async def before_daily_update(self):
         await self.bot.wait_until_ready()
 
+    @app_commands.command(name='갱신', description='전체 유저 데이터를 최신화합니다 (관리자 전용)')
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def refresh_all(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        users = await db.get_all_users()
+        total = len(users)
+
+        if total == 0:
+            await interaction.followup.send('❌ 등록된 유저가 없습니다.', ephemeral=True)
+            return
+
+        await interaction.followup.send(
+            f'🔄 전체 유저 **{total}명** 데이터 갱신 시작...\n(완료 시 결과를 알려드립니다)',
+            ephemeral=True,
+        )
+
+        guilds = [self.bot.get_guild(gid) for gid in GUILD_IDS]
+        guilds = [g for g in guilds if g]
+
+        main_ok = main_fail = 0
+        sub_ok = sub_fail = 0
+        nick_updated = 0
+
+        # 메인캐 갱신
+        for row in users:
+            fresh = await scrape_character(row['char_name'])
+            if fresh:
+                await db.upsert_user(
+                    discord_id=row['discord_id'],
+                    discord_name=row['discord_name'] or '',
+                    char_name=fresh['char_name'],
+                    job=fresh['job'],
+                    combat_power=fresh['combat_power'],
+                    atool_score=fresh['atool_score'],
+                )
+                for guild in guilds:
+                    member = guild.get_member(int(row['discord_id']))
+                    if member:
+                        try:
+                            await member.edit(nick=_build_nickname(fresh['char_name'], fresh['job'], fresh['combat_power']))
+                            nick_updated += 1
+                        except discord.Forbidden:
+                            pass
+                main_ok += 1
+            else:
+                main_fail += 1
+
+        # 부캐 갱신
+        all_subs = await db.get_all_sub_characters()
+        for sc in all_subs:
+            fresh = await scrape_character(sc['char_name'])
+            if fresh:
+                await db.upsert_sub_character(
+                    discord_id=sc['discord_id'],
+                    char_name=fresh['char_name'],
+                    job=fresh['job'],
+                    combat_power=fresh['combat_power'],
+                    atool_score=fresh['atool_score'],
+                )
+                sub_ok += 1
+            else:
+                sub_fail += 1
+
+        lines = [
+            f'✅ **갱신 완료!**',
+            f'',
+            f'**메인캐** — 성공: {main_ok}명 / 실패: {main_fail}명',
+            f'**부캐** — 성공: {sub_ok}개 / 실패: {sub_fail}개',
+            f'**닉네임 변경** — {nick_updated}명',
+        ]
+        if main_fail or sub_fail:
+            lines.append(f'\n⚠️ 실패 항목은 캐릭터명이 변경됐거나 API 오류일 수 있습니다.')
+
+        await interaction.followup.send('\n'.join(lines), ephemeral=True)
+
+    @refresh_all.error
+    async def refresh_all_error(self, interaction: discord.Interaction, error):
+        await interaction.response.send_message('❌ 관리자만 사용할 수 있습니다.', ephemeral=True)
+
     @app_commands.command(name='등록설정', description='유저 등록 버튼을 이 채널에 생성합니다 (관리자 전용)')
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)

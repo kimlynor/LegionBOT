@@ -167,6 +167,13 @@ async def upsert_sub_character(discord_id: str, char_name: str, job: str, combat
     await add_sub_character(discord_id, char_name, job, combat_power, atool_score)
 
 
+async def get_all_sub_characters():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute('SELECT * FROM sub_characters ORDER BY discord_id') as cursor:
+            return await cursor.fetchall()
+
+
 # ── parties ───────────────────────────────────────────────────────────────────
 
 async def get_party(party_id: int):
