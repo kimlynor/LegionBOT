@@ -1,95 +1,96 @@
 import asyncio
+import re
 from typing import Optional
+from urllib.parse import unquote
 
-from playwright.async_api import async_playwright, Browser
+import aiohttp
 
-# 무닌 서버 고정 (마족 2013)
-RACE_BUTTON = '#race-asmodian'
-SERVER_VALUE = '2013'
+SERVER_ID = '2013'
+RACE = '2'  # 마족
 
-# 동시 검색 최대 5개 제한 (브라우저 과부하 방지)
+SEARCH_URL = 'https://aion2.plaync.com/ko-kr/api/search/aion2/search/v2/character'
+INFO_URL   = 'https://aion2.plaync.com/api/character/info'
+
 _semaphore = asyncio.Semaphore(5)
-_browser: Optional[Browser] = None
-_playwright = None
+_session: Optional[aiohttp.ClientSession] = None
 
 
-async def _get_browser() -> Browser:
-    """브라우저 인스턴스 재사용 (없으면 새로 생성)"""
-    global _browser, _playwright
-    if _browser is None or not _browser.is_connected():
-        if _playwright is None:
-            _playwright = await async_playwright().start()
-        _browser = await _playwright.chromium.launch(headless=True)
-    return _browser
+async def _get_session() -> aiohttp.ClientSession:
+    global _session
+    if _session is None or _session.closed:
+        _session = aiohttp.ClientSession()
+    return _session
 
 
 async def scrape_character(char_name: str) -> Optional[dict]:
     """
-    aion2tool.com 무닌 서버에서 캐릭터 정보를 스크래핑합니다.
+    aion2.plaync.com 공식 API로 캐릭터 정보를 조회합니다.
     반환: {'char_name': str, 'job': str, 'combat_power': int, 'atool_score': int}
-    동시 요청은 최대 5개로 제한 — 100명이 눌러도 순차 처리되어 안전합니다.
+      - combat_power : 아이템레벨 (예: 3976)
+      - atool_score  : 공식 전투력 combatPower (예: 508060)
     """
     async with _semaphore:
         try:
-            browser = await _get_browser()
-            page = await browser.new_page()
-            try:
-                await page.goto('https://aion2tool.com', timeout=30000, wait_until='domcontentloaded')
-                await page.wait_for_timeout(2000)
+            session = await _get_session()
 
-                await page.click(RACE_BUTTON)
-                await page.wait_for_timeout(300)
-                await page.select_option('#server-select', SERVER_VALUE)
-                await page.wait_for_timeout(300)
-
-                await page.fill('#character-keyword', char_name)
-                await page.keyboard.press('Enter')
-
-                try:
-                    await page.wait_for_selector('#result-nickname', timeout=12000)
-                except Exception:
+            # 1단계: 이름으로 검색 → characterId 획득
+            async with session.get(SEARCH_URL, params={
+                'keyword': char_name,
+                'serverId': SERVER_ID,
+                'race': RACE,
+                'size': '5',
+            }) as resp:
+                if resp.status != 200:
                     return None
+                data = await resp.json(content_type=None)
 
-                result_name = await page.text_content('#result-nickname')
-                if not result_name or not result_name.strip():
+            char_list = data.get('list', [])
+            if not char_list:
+                return None
+
+            # 이름 정확 매칭 (HTML 태그 제거)
+            char_id = None
+            found_name = None
+            for item in char_list:
+                clean = re.sub(r'<[^>]+>', '', item.get('name', ''))
+                if clean.strip().lower() == char_name.strip().lower():
+                    char_id = unquote(item['characterId'])
+                    found_name = clean.strip()
+                    break
+
+            if not char_id:
+                # 정확 매칭 없으면 첫 번째 결과
+                char_id = unquote(char_list[0]['characterId'])
+                found_name = re.sub(r'<[^>]+>', '', char_list[0].get('name', '')).strip()
+
+            # 2단계: characterId로 상세 정보 조회
+            async with session.get(INFO_URL, params={
+                'lang': 'ko',
+                'characterId': char_id,
+                'serverId': SERVER_ID,
+            }) as resp:
+                if resp.status != 200:
                     return None
-                result_name = result_name.strip()
+                info = await resp.json(content_type=None)
 
-                job = '알 수 없음'
-                combat_power = 0
-                chips = await page.query_selector_all('.stat-chip')
-                for chip in chips:
-                    text = await chip.text_content()
-                    if not text:
-                        continue
-                    lines = [l.strip() for l in text.splitlines() if l.strip()]
-                    if len(lines) >= 2:
-                        label, value = lines[0], lines[-1]
-                        if label == '직업':
-                            job = value
-                        elif label == '전투력':
-                            digits = ''.join(c for c in value.replace(',', '') if c.isdigit())
-                            if digits:
-                                combat_power = int(digits)
+            profile = info.get('profile', {})
+            class_name    = profile.get('className', '알 수 없음')
+            combat_power  = profile.get('combatPower', 0)   # 공식 전투력 (atool_score 자리)
+            char_name_res = profile.get('characterName', found_name)
 
-                atool_score = 0
-                score_el = await page.query_selector('#dps-score-value')
-                if score_el:
-                    score_text = await score_el.text_content()
-                    if score_text:
-                        digits = ''.join(c for c in score_text.replace(',', '') if c.isdigit())
-                        if digits:
-                            atool_score = int(digits)
+            # 아이템레벨 (combat_power 자리)
+            item_level = 0
+            for stat in info.get('stat', {}).get('statList', []):
+                if stat.get('type') == 'ItemLevel':
+                    item_level = stat.get('value', 0)
+                    break
 
-                return {
-                    'char_name': result_name,
-                    'job': job,
-                    'combat_power': combat_power,
-                    'atool_score': atool_score,
-                }
-
-            finally:
-                await page.close()
+            return {
+                'char_name':    char_name_res,
+                'job':          class_name,
+                'combat_power': item_level,    # 아이템레벨
+                'atool_score':  combat_power,  # 공식 전투력
+            }
 
         except Exception as e:
             print(f'[스크래퍼 오류] {e}')

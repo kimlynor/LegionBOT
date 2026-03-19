@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s https://aion2.plaync.com/ko-kr/characters/index)",
+      "Bash(curl -s https://assets.playnccdn.com/static-aion2/characters/js/index.js)",
+      "Bash(grep -o '.\\\\{0,300\\\\}search/v2/character.\\\\{0,300\\\\}')",
+      "Bash(grep -o '.\\\\{0,200\\\\}Qs\\\\s*=\\\\s*{.\\\\{0,500\\\\}')",
+      "Bash(curl -s -w n---HTTP_STATUS:%{http_code}---n \"https://aion2.plaync.com/ko-kr/api/search/aion2/search/v2/character?keyword=%EB%B0%A4%ED%94%BC&serverId=2013&race=2&page=1&size=10\" -H 'Accept: application/json')"
+    ]
+  }
+}

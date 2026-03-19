@@ -42,7 +42,7 @@ MEDIUM_TOP = Border(
     top=Side(style='medium'), bottom=Side(style='thin'),
 )
 
-HEADERS = ['구분', '캐릭명', '전투력', '아툴점수', '가능시간', '메모']
+HEADERS = ['구분', '캐릭명', '아이템레벨', '전투력', '가능시간', '메모']
 COL_WIDTHS = [8, 22, 16, 16, 25, 30]
 
 DAY_MAP = {
