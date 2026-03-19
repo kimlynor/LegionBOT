@@ -111,7 +111,11 @@ class CharNameModal(discord.ui.Modal, title='캐릭터 등록 / 수정'):
         if nick_changed:
             embed.add_field(name='닉네임', value=f'`{nickname}`', inline=False)
         else:
-            embed.set_footer(text='⚠️ 닉네임 변경 권한이 없어 닉네임은 변경되지 않았습니다.')
+            embed.add_field(
+                name='⚠️ 닉네임 자동 변경 불가 (관리자/서버장)',
+                value=f'아래 닉네임을 복사해서 직접 변경해주세요.\n```{nickname}```',
+                inline=False,
+            )
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
